@@ -1,0 +1,197 @@
+#!/bin/sh
+
+#DT-MREIT pre-processing for the pinapple
+#Ainslie Johnstone
+
+# echo times ' 5, 7.32, 9.64, 11.92, 14.82, 16.6, 18.92, 21.24, 23.56, 25.88, 28.2, 30.52, 32.84, 35.16, 37.48, 39.8, 42.12, 44.44'
+# current is fully on after 7.5ms
+# current times ''
+# y=4258
+# weighting factors
+
+# Rename the files to something sensible
+for thisEcho in $(seq 1 18)
+do
+  cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/Mag
+cp PQ050320_Phantom_tACS.S23_mfc_3dflash_v3g_tACS_2Set_20200305111248_23_e${thisEcho}.json LR_Pinapple_Mag_e${thisEcho}.json
+cp PQ050320_Phantom_tACS.S23_mfc_3dflash_v3g_tACS_2Set_20200305111248_23_e${thisEcho}.nii.gz LR_Pinapple_Mag_e${thisEcho}.nii.gz
+  cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/Phase
+cp PQ050320_Phantom_tACS.S24_mfc_3dflash_v3g_tACS_2Set_20200305111248_24_e${thisEcho}_ph.json LR_Pinapple_Phase_e${thisEcho}.json
+cp PQ050320_Phantom_tACS.S24_mfc_3dflash_v3g_tACS_2Set_20200305111248_24_e${thisEcho}_ph.nii.gz LR_Pinapple_Phase_e${thisEcho}.nii.gz
+  cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/Mag
+cp PQ050320_Phantom_tACS.S31_mfc_3dflash_v3g_tACS_2Set_20200305111248_31_e${thisEcho}.json AP_Pinapple_Mag_e${thisEcho}.json
+cp PQ050320_Phantom_tACS.S31_mfc_3dflash_v3g_tACS_2Set_20200305111248_31_e${thisEcho}.nii.gz AP_Pinapple_OGspace_Mag_e${thisEcho}.nii.gz
+  cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/Phase
+cp PQ050320_Phantom_tACS.S32_mfc_3dflash_v3g_tACS_2Set_20200305111248_32_e${thisEcho}_ph.json AP_Pinapple_Phase_e${thisEcho}.json
+cp PQ050320_Phantom_tACS.S32_mfc_3dflash_v3g_tACS_2Set_20200305111248_32_e${thisEcho}_ph.nii.gz AP_Pinapple_OGspace_Phase_e${thisEcho}.nii.gz
+done
+
+
+#The pinapple got moved between the LR and AP scans so I am going to flirt the AP into LR space (hopefully the same as DTI)
+  cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple
+flirt -in AP_stim/Mag/AP_Pinapple_OGspace_Mag_e1.nii.gz -ref LR_stim/Mag/LR_Pinapple_Mag_e1.nii.gz -out AP_stim/Mag/AP_Pinapple_Mag_e1.nii.gz -omat AP_stim/AP2LR_transform
+for thisEcho in $(seq 1 18)
+do
+  cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple
+  flirt -in AP_stim/Mag/AP_Pinapple_OGspace_Mag_e${thisEcho}.nii.gz -ref LR_stim/Mag/LR_Pinapple_Mag_e${thisEcho}.nii.gz -out AP_stim/Mag/AP_Pinapple_Mag_e${thisEcho}.nii.gz -init AP_stim/AP2LR_transform -applyxfm
+  flirt -in AP_stim/Phase/AP_Pinapple_OGspace_Phase_e${thisEcho}.nii.gz -ref LR_stim/Phase/LR_Pinapple_Phase_e${thisEcho}.nii.gz -out AP_stim/Phase/AP_Pinapple_Phase_e${thisEcho}.nii.gz -init AP_stim/AP2LR_transform -applyxfm
+  echo  echo $thisEcho complete
+done
+flirt -in LR_stim/Mag/LR_Pinapple_Mag_e1.nii.gz -ref AP_stim/Mag/AP_Pinapple_OGspace_Mag_e1.nii.gz  -out AP_stim/Mag/LR2AP_Pinapple_Mag_e1.nii.gz -omat AP_stim/LR2AP_transform
+flirt -in Pinapple_mask_MREIT.nii.gz -ref AP_stim/Mag/AP_Pinapple_Mag_e1.nii.gz -out Pinapple_mask_MREIT_AP.nii.gz -init AP_stim/LR2AP_transform -applyxfm
+
+mv Pinapple_mask_MREIT.nii.gz LR_stim/Pinapple_mask_MREIT.nii.gz
+mv Pinapple_mask_MREIT_AP.nii.gz AP_stim/Pinapple_mask_MREIT.nii.gz
+mv AP_stim/LR2AP_transform LR2AP_transform
+mv AP_stim/AP2LR_transform AP2LR_transform
+
+# Made the decision to run the analysis in the orignal space for both the AP and LR scans,
+# then will convert the results to LR/ DTI space
+
+
+# make fieldmap images for LR- WRONG SEE MATLAB FUNCTION
+# NB no need to run prelude because apparently the unwrapping happens in fsl_prepare_fieldmap
+#cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/
+#mkdir Fieldmaps
+#for thisEcho in $(seq 1 18)
+#do
+#  fslmaths Phase/LR_Pinapple_Phase_e${thisEcho}.nii.gz -add 4096 -div 2 Phase/LR_Pinapple_Phase_e${thisEcho}_scaled.nii.gz
+#  prelude -a Mag/LR_Pinapple_Mag_e${thisEcho}.nii.gz -p Phase/LR_Pinapple_Phase_e${thisEcho}_scaled.nii.gz -o Phase/LR_Pinapple_Phase_e${thisEcho}_unwraped.nii.gz
+#  fslsplit Phase/LR_Pinapple_Phase_e${thisEcho}_scaled.nii.gz Phase/ph
+#  fslmaths Mag/LR_Pinapple_Mag_e${thisEcho}.nii.gz -mas Pinapple_mask_MREIT.nii.gz Mag/LR_Pinapple_Mag_e${thisEcho}_mas.nii.gz
+#  fslsplit Mag/LR_Pinapple_Mag_e${thisEcho}_mas.nii.gz Mag/mag
+#  fslmaths Phase/ph0000.nii.gz -sub Phase/ph0001.nii.gz -mas Pinapple_mask_MREIT.nii.gz Phase/LR_Pinapple_Phase_e${thisEcho}_scaled_dif.nii.gz
+#  fsl_prepare_fieldmap SIEMENS Phase/ph0000.nii.gz Mag/mag0000.nii.gz Fieldmaps/LR_Pinapple_e${thisEcho}_complex_pos.nii.gz 0.1
+#  fsl_prepare_fieldmap SIEMENS Phase/ph0001.nii.gz Mag/mag0001.nii.gz Fieldmaps/LR_Pinapple_e${thisEcho}_complex_neg.nii.gz 0.1
+#  fsl_prepare_fieldmap SIEMENS Phase/LR_Pinapple_Phase_e${thisEcho}_scaled_dif.nii.gz Mag/mag0000.nii.gz Fieldmaps/LR_Pinapple_e${thisEcho}_complex_dif.nii.gz 0.1
+#  echo another LR one down: echo ${thisEcho}
+#done
+
+
+# make fieldmap images for AP -  WRONG SEE MATLAB FUNCTION
+#cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/
+#mkdir Fieldmaps
+#for thisEcho in $(seq 1 18)
+#do
+#  fslmaths Phase/AP_Pinapple_OGspace_Phase_e${thisEcho}.nii.gz -add 4096 -div 2 Phase/AP_Pinapple_Phase_e${thisEcho}_scaled.nii.gz
+#  #prelude -a Mag/AP_Pinapple_Mag_e${thisEcho}.nii.gz -p Phase/AP_Pinapple_Phase_e${thisEcho}_scaled.nii.gz -o Phase/AP_Pinapple_Phase_e${thisEcho}_unwraped.nii.gz
+#  fslsplit Phase/AP_Pinapple_Phase_e${thisEcho}_scaled.nii.gz Phase/ph
+#  fslmaths Mag/AP_Pinapple_OGspace_Mag_e${thisEcho}.nii.gz -mas Pinapple_mask_MREIT.nii.gz Mag/AP_Pinapple_Mag_e${thisEcho}_mas.nii.gz
+#  fslsplit Mag/AP_Pinapple_Mag_e${thisEcho}_mas.nii.gz Mag/mag
+#  fslmaths Phase/ph0000.nii.gz -sub Phase/ph0001.nii.gz -mas Pinapple_mask_MREIT.nii.gz Phase/AP_Pinapple_OGspace_Phase_e${thisEcho}_scaled_dif.nii.gz
+#  fsl_prepare_fieldmap SIEMENS Phase/ph0000.nii.gz Mag/mag0000.nii.gz Fieldmaps/AP_Pinapple_e${thisEcho}_complex_pos.nii.gz 0.1
+#  fsl_prepare_fieldmap SIEMENS Phase/ph0001.nii.gz Mag/mag0001.nii.gz Fieldmaps/AP_Pinapple_e${thisEcho}_complex_neg.nii.gz 0.1
+#  fsl_prepare_fieldmap SIEMENS Phase/AP_Pinapple_OGspace_Phase_e${thisEcho}_scaled_dif.nii.gz Mag/mag0000.nii.gz Fieldmaps/AP_Pinapple_e${thisEcho}_complex_dif.nii.gz 0.1
+#  echo another AP one down: echo ${thisEcho}
+#done
+
+
+# Merge together all of the magnitude images to use in estimating the T2* relaxation in the two scans...
+# Okay, the 4D file has 36 scans in the t dimension as there are two at each echo. Will account for this in the analysis
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/Mag
+fslmerge -t AP_stim_4Dmag.nii.gz AP_Pinapple_Mag_e1.nii.gz	AP_Pinapple_Mag_e2.nii.gz	AP_Pinapple_Mag_e3.nii.gz	AP_Pinapple_Mag_e4.nii.gz	AP_Pinapple_Mag_e5.nii.gz AP_Pinapple_Mag_e6.nii.gz	AP_Pinapple_Mag_e7.nii.gz	AP_Pinapple_Mag_e8.nii.gz	AP_Pinapple_Mag_e9.nii.gz AP_Pinapple_Mag_e10.nii.gz AP_Pinapple_Mag_e11.nii.gz	AP_Pinapple_Mag_e12.nii.gz	AP_Pinapple_Mag_e13.nii.gz	AP_Pinapple_Mag_e14.nii.gz	AP_Pinapple_Mag_e15.nii.gz AP_Pinapple_Mag_e16.nii.gz	AP_Pinapple_Mag_e17.nii.gz AP_Pinapple_Mag_e18.nii.gz
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/Mag
+fslmerge -t LR_stim_4Dmag.nii.gz LR_Pinapple_Mag_e1.nii.gz	LR_Pinapple_Mag_e2.nii.gz	LR_Pinapple_Mag_e3.nii.gz	LR_Pinapple_Mag_e4.nii.gz	LR_Pinapple_Mag_e5.nii.gz LR_Pinapple_Mag_e6.nii.gz	LR_Pinapple_Mag_e7.nii.gz	LR_Pinapple_Mag_e8.nii.gz	LR_Pinapple_Mag_e9.nii.gz LR_Pinapple_Mag_e10.nii.gz LR_Pinapple_Mag_e11.nii.gz	LR_Pinapple_Mag_e12.nii.gz	LR_Pinapple_Mag_e13.nii.gz	LR_Pinapple_Mag_e14.nii.gz	LR_Pinapple_Mag_e15.nii.gz LR_Pinapple_Mag_e16.nii.gz	LR_Pinapple_Mag_e17.nii.gz LR_Pinapple_Mag_e18.nii.gz
+
+#Ran MATLAB code to get the Bz images
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/
+fslreorient2std AP_meanBz.nii AP_meanBz_RAS
+fslreorient2std Pinapple_mask_MREIT.nii.gz Pinapple_mask_MREIT_RAS
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/
+fslreorient2std LR_meanBz.nii LR_meanBz_RAS
+fslreorient2std Pinapple_mask_MREIT.nii.gz Pinapple_mask_MREIT_RAS
+
+#Making the eTMP files for roast
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/
+fslmaths Pinapple_mask_MREIT_RAS.nii.gz -sub 1 -abs Pinapple_air_mask.nii.gz
+fslmerge -t eTMP_Pinapple_AP Pinapple_mask_MREIT_RAS.nii.gz Pinapple_air_mask.nii.gz
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/
+fslmaths Pinapple_mask_MREIT_RAS.nii.gz -sub 1 -abs Pinapple_air_mask.nii.gz
+fslmerge -t eTMP_Pinapple_LR Pinapple_mask_MREIT_RAS.nii.gz Pinapple_air_mask.nii.gz
+
+#Making the mask files for ROAST, I then moved them into the roast folder to run cause that worked better for some reason
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/
+mkdir roast
+cp Pinapple_mask_MREIT_RAS.nii roast/Pinapple_AP.nii
+fslmaths Pinapple_mask_MREIT_RAS.nii.gz -thr 0.2 -bin -mul 5 roast/Pinapple_AP_T1orT2_masks.nii.gz
+cp Pinapple_mask_MREIT_RAS.nii.gz roast/c5Pinapple_AP_T1orT2.nii
+fslmaths roast/c5Pinapple_AP_T1orT2.nii -sub 1 -abs roast/c6Pinapple_AP_T1orT2.nii.gz
+fslmaths Pinapple_mask_MREIT_RAS.nii -thr 4 -bin roast/c4Pinapple_AP_T1orT2.nii.gz
+cp roast/c4Pinapple_AP_T1orT2.nii.gz roast/c3Pinapple_AP_T1orT2.nii.gz
+cp roast/c4Pinapple_AP_T1orT2.nii.gz roast/c2Pinapple_AP_T1orT2.nii.gz
+cp roast/c4Pinapple_AP_T1orT2.nii.gz roast/c1Pinapple_AP_T1orT2.nii.gz
+gunzip roast/c1Pinapple_AP_T1orT2.nii.gz
+gunzip roast/c2Pinapple_AP_T1orT2.nii.gz
+gunzip roast/c3Pinapple_AP_T1orT2.nii.gz
+gunzip roast/c4Pinapple_AP_T1orT2.nii.gz
+gunzip roast/c6Pinapple_AP_T1orT2.nii.gz
+gunzip roast/Pinapple_AP_T1orT2_masks.nii.gz
+
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/
+mkdir roast
+cp Pinapple_mask_MREIT_RAS.nii.gz roast/Pinapple_LR.nii.gz
+fslmaths Pinapple_mask_MREIT_RAS.nii.gz -thr 0.2 -bin -mul 5 roast/Pinapple_LR_T1orT2_masks.nii.gz
+cp Pinapple_mask_MREIT_RAS.nii.gz roast/c5Pinapple_LR_T1orT2.nii.gz
+fslmaths roast/c5Pinapple_LR_T1orT2.nii -sub 1 -abs roast/c6Pinapple_LR_T1orT2.nii.gz
+fslmaths Pinapple_mask_MREIT_RAS.nii -thr 4 -bin roast/c4Pinapple_LR_T1orT2.nii.gz
+cp roast/c4Pinapple_LR_T1orT2.nii.gz roast/c3Pinapple_LR_T1orT2.nii.gz
+cp roast/c4Pinapple_LR_T1orT2.nii.gz roast/c2Pinapple_LR_T1orT2.nii.gz
+cp roast/c4Pinapple_LR_T1orT2.nii.gz roast/c1Pinapple_LR_T1orT2.nii.gz
+gunzip roast/c1Pinapple_LR_T1orT2.nii.gz
+gunzip roast/c2Pinapple_LR_T1orT2.nii.gz
+gunzip roast/c3Pinapple_LR_T1orT2.nii.gz
+gunzip roast/c4Pinapple_LR_T1orT2.nii.gz
+gunzip roast/c6Pinapple_LR_T1orT2.nii.gz
+gunzip roast/Pinapple_LR_T1orT2_masks.nii.gz
+
+
+#resizing the images for the final matlab scripts
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/AProast
+ #fslroi Pinapple_AP_20200403T112849_e.nii blankslice.nii.gz 0 52 0 1 0 96
+#fslmerge -y ../AP_J0image_resize Pinapple_AP_20200403T112849_e.nii blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz
+#cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim/
+#fslroi Pinapple_mask_MREIT_RAS.nii.gz blankslice.nii.gz 0 52 0 1 0 96
+#fslmerge -y AP_Bzimage_resize AP_meanBz_RAS.nii.gz blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz
+#fslmerge -y AP_mask_resize Pinapple_mask_MREIT_RAS.nii.gz blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz
+cp Pinapple_AP_20200403T112849_e.nii ../AP_J0image.nii
+
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/LRroast
+ #fslroi Pinapple_LR_20200403T141738_e.nii blankslice.nii.gz 0 52 0 1 0 96
+#fslmerge -y ../LR_J0image_resize Pinapple_LR_20200403T141738_e.nii blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz
+#cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim/
+#fslroi Pinapple_mask_MREIT_RAS.nii.gz blankslice.nii.gz 0 52 0 1 0 96
+#fslmerge -y LR_Bzimage_resize LR_meanBz_RAS.nii.gz blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz
+#fslmerge -y LR_mask_resize Pinapple_mask_MREIT_RAS.nii.gz blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz  blankslice.nii.gz
+cp Pinapple_LR_20200403T141738_e.nii ../LR_J0image.nii
+
+#Now convert the Jp image from the AP into LR space so that they can be combined
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/
+fslreorient2std AP_stim/Mag/AP_Pinapple_OGspace_Mag_e1.nii.gz AP_Pinapple_mag.nii.gz
+fslreorient2std LR_stim/Mag/LR_Pinapple_Mag_e1.nii.gz LR_Pinapple_mag.nii.gz
+fslroi LR_stim/Jp.nii blankspace.nii.gz 51 32 0 -1 0 -1 0 2
+fslmerge -x AP_stim/AP_Pinapple_resize AP_stim/AP_Pinapple_mag.nii.gz blankspace.nii.gz
+fslmerge -x LR_stim/R_Pinapple_resize LR_stim/LR_Pinapple_mag.nii.gz blankspace.nii.gz
+#fslroi AP_stim/Jp.nii AP_stim/Jp_2dir.nii 0 -1 0 -1 0 -1 0 2
+#fslroi LR_stim/Jp.nii LR_stim/Jp_2dir.nii 0 -1 0 -1 0 -1 0 2
+
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/
+flirt -in AP_Pinapple_resize.nii.gz -ref LR_Pinapple_resize.nii.gz -out AP2LR_Pinapple_resize.nii.gz -omat AP2LR_transform_resized
+flirt -in AP_stim/AP_Jp.nii -ref LR_stim/LR_Jp.nii -out AP_stim/AP2LR_Jp.nii -init AP2LR_transform_resized -applyxfm
+
+
+
+#Some things I did once I had the new Bz creation sequence in matlab
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/AP_stim
+fslmaths Pinapple_mask_MREIT -thr 0.5 -bin Pinapple_mask_MREIT
+for thisEcho in $(seq 1 18)
+do
+fslmaths Fieldmaps/Bz_e${thisEcho}.nii -mas Pinapple_mask_MREIT -s 5 -mas Pinapple_mask_MREIT Fieldmaps/Bz_e${thisEcho}_mas.nii.gz
+done
+
+
+cd ~/'OneDrive - University College London'/1_DTMREIT/Pineapple/LR_stim
+fslmaths Pinapple_mask_MREIT -thr 0.5 -bin -ero Pinapple_mask_MREIT
+for thisEcho in $(seq 1 18)
+do
+fslmaths Fieldmaps/Bz_e${thisEcho}.nii -mas Pinapple_mask_MREIT -s 5 -mas Pinapple_mask_MREIT Fieldmaps/Bz_e${thisEcho}_mas.nii.gz
+done

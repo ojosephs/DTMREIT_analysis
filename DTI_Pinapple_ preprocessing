@@ -1,0 +1,35 @@
+#!/bin/sh
+
+#DTI pre-processing
+#Ainslie Johnstone
+
+#Rename the files to something sensible
+#Here I named them BlipUp_b0 BlipDown_b0 BlipUp BlipDown
+
+#Created a txtfile with the scanning parameters
+
+
+cd ~/Desktop/'OneDrive - University College London'/1_DTMREIT/Pineapple/DTI
+
+#annoyingly the blipdown image is lower res. I resampled blipUp to blipDown
+# THIS IS WHERE I GOT TO BEFORE SKIING!
+
+
+fslmerge -t Pinapple_combined_b0s.nii.gz Pinapple_BlipUp_b0.nii.gz  Pinapple_BlipDown_b0.nii.gz
+
+#topup using the default config file
+topup --imain=Pinapple_combined_b0s --datain=aqu_params.txt --config=b02b0.cnf --out=Pinapple_topup_result
+applytopup -i Pinapple_BlipUp_b0,Pinapple_BlipDown_b0 --datain=aqu_params.txt --inindex=1,2 --topup=Pinapple_topup_result --out=Pinapple_b0_cor
+
+# This doesnt work because of the differnces in sizes of blip up (1+152) and down (1+7)
+applytopup -i Pinapple_BlipUp --datain=aqu_params_Up.txt --inindex=1 --topup=Pinapple_topup_result --out=Pinapple_cor
+
+fslmaths Pinapple_b0_cor -thr 300 Pinapple_b0_cor_bet # I then manually tidied this up
+fslmaths Pinapple_b0_cor_bet -ero -bin Pinapple_mask
+fslmaths Pinapple_b0_cor -mas Pinapple_mask Pinapple_b0_cor_mask
+fslmaths Pinapple_b0_cor_mask -thr 0 Pinapple_b0_cor_mask
+
+fnirt --ref=Pinapple_b0_cor_mask  --in=Pinapple_BlipUp
+applywarp -i Pinapple_BlipUp -o Pinapple_DiffCor -r Pinapple_b0_cor_mask.nii.gz -w Pinapple_BlipUp_warpcoef.nii.gz
+
+dtifit --data=Pinapple_DiffCor.nii.gz -o Pinapple -m Pinapple_mask.nii.gz --bvecs=Pinapple_BlipUp.bvec --bvals=Pinapple_BlipUp.bval
